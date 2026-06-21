@@ -144,8 +144,6 @@ Tests whether the participation ratio (holders index / CAV index) shows a consis
 ---
 
 
----
-
 ## Limitations
 
 - Correlation ≠ causation; structural-shift signals may reflect macro conditions (rate environment, regulatory clarity) rather than tokenization-specific dynamics
