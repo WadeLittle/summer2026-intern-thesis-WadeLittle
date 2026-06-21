@@ -143,9 +143,6 @@ Tests whether the participation ratio (holders index / CAV index) shows a consis
 
 ---
 
-### A note on data granularity
-
-The API provides daily data, which the pipeline resamples to monthly before running any statistics. Monthly is the correct granularity for this analysis. Daily observations are not independent — today's CAV is nearly identical to yesterday's — which violates the independence assumption of OLS, Spearman, and Kendall. Using daily data would produce artificially low p-values without adding real information. The right way to improve statistical power here is extending the time series further back, not increasing granularity within the existing window.
 
 ---
 
