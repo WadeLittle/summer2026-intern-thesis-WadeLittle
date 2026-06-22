@@ -150,3 +150,69 @@ Tests whether the participation ratio (holders index / CAV index) shows a consis
 - Analysis window starts Jan 2024 — a short time series limits statistical power
 - Single API source (rwa.xyz); coverage gaps in smaller asset classes may affect results
 - Asset classes analyzed in isolation, not in portfolio context
+
+
+## Conclusion
+
+══════════════════════════════════════════════════════════════════════
+  RWA TOKENIZATION — STRUCTURAL SHIFT ANALYSIS
+  Data: rwa.xyz API  |  Period: Jan 2024–May 2026  |  n=29 months
+══════════════════════════════════════════════════════════════════════
+
+PILLAR 1 — MARKET CONCENTRATION  (HHI)
+  Scale: 1.0 = one class dominates  |  0.25 = equal weight
+  Start HHI          0.4922
+  End HHI            0.4709
+  OLS β/month        -0.00119   p = 0.224     R² = 0.054
+
+PILLAR 2 — ON-CHAIN PARTICIPATION
+  Spearman ρ: correlation between CAV index and holder index
+  Kendall τ:  monotonic trend in participation ratio (holders/CAV), + = broadening
+
+  Asset Class            Spearman ρ        p     Kendall τ        p         Ratio
+  ───────────────────────────────────────────────────────────────────────────────
+  US Treasury Debt           +0.967   <0.001 **      +0.365    0.005 **    1.00 → 1.07
+  Commodities                +0.997   <0.001 **      -0.458   <0.001 **    1.00 → 0.65
+  Real Estate                +0.993   <0.001 **      -0.586   <0.001 **    1.00 → 0.21
+  Stocks                     +0.933   <0.001 **      +0.557   <0.001 **    1.00 → 5.81
+
+PILLAR 3 — LIQUIDITY  (3-month rolling turnover OLS)
+  β/month: change in monthly turnover ratio per month  |  + = improving liquidity
+
+  Asset Class               β/month        p        R²
+  ────────────────────────────────────────────────────
+  US Treasury Debt         -0.00965    0.004 **   0.269
+  Commodities              +0.06619   <0.001 **   0.777
+  Real Estate              -0.00427    0.215      0.056
+  Stocks                   +0.09520   <0.001 **   0.669
+
+  Significance: ** p<0.01   * p<0.05   ~ p<0.10
+
+──────────────────────────────────────────────────────────────────────
+  THESIS CONCLUSION
+──────────────────────────────────────────────────────────────────────
+  Market concentration showed no statistically significant trend (β
+  = -0.0012/month, p = 0.224). The RWA market remained heavily
+  concentrated throughout the period.
+
+  On-chain participation showed broadening in 2 asset class(es)
+  (Stocks, US Treasury Debt), but the pattern was not consistent
+  across all classes.
+
+  In Commodities, Real Estate, value growth outpaced wallet
+  participation, which may reflect institutional concentration
+  rather than broad adoption.
+
+  Liquidity improved significantly in 2 asset class(es)
+  (Commodities, Stocks). Remaining classes showed flat or
+  inconsistent turnover, suggesting liquidity development is uneven
+  across the market.
+
+  The data provides mixed but directionally positive evidence. Some
+  structural shift signals are present, but they are not consistent
+  across all asset classes or all three pillars. Caution is
+  warranted in characterizing this as a broad structural shift — it
+  may reflect early-stage diversification rather than a sustained
+  trend.
+
+══════════════════════════════════════════════════════════════════════
