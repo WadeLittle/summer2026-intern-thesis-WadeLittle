@@ -4,3 +4,5 @@ pandas
 matplotlib
 scipy
 statsmodels
+numpy
+pytest

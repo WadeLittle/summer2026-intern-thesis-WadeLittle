@@ -12,9 +12,11 @@ import time
 from urllib.parse import quote
 import requests
 
-from config import BASE_URL, HEADERS, CACHE_DIR, CACHE_TTL_SECONDS, MEASURE_CAV, \
-    MEASURE_HOLDERS, MEASURE_VOLUME, ANALYSIS_START_DATE
- 
+from src.config import (
+    BASE_URL, HEADERS, CACHE_DIR, CACHE_TTL_SECONDS,
+    MEASURE_CAV, MEASURE_HOLDERS, MEASURE_VOLUME, ANALYSIS_START_DATE,
+)
+
 
 def cached_request(fetch_fn, cache_key):
     """
@@ -29,25 +31,29 @@ def cached_request(fetch_fn, cache_key):
     if cache_exists:
         age_seconds = time.time() - os.path.getmtime(path)
         if age_seconds < CACHE_TTL_SECONDS:
-            with open(path) as file:
-                return json.load(file)
+            print(f"[cache] Using cached data for '{cache_key}' "
+                  f"(age: {age_seconds / 3600:.1f}h, TTL: {CACHE_TTL_SECONDS / 3600:.0f}h)")
+            with open(path) as f:
+                return json.load(f)
 
     try:
+        print(f"[cache] Fetching fresh data for '{cache_key}'...")
         data = fetch_fn()
     except Exception as e:
         if cache_exists:
             print(f"[cache] Refresh failed for '{cache_key}' ({e}). Using stale cache.")
-            with open(path) as file:
-                return json.load(file)
+            with open(path) as f:
+                return json.load(f)
         raise
 
-    with open(path, "w") as file: #allows you to write to the file
-        json.dump(data, file, indent=2)
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
+    print(f"[cache] Saved '{cache_key}' to {path}")
     return data
 
 
 def _timeseries_query(measure_slug, endpoint, group_by="asset_class",
-                       aggregate_function="sum", interval="day", mode="stock"):
+                      aggregate_function="sum", interval="day", mode="stock"):
     """
     Shared query builder for the /aggregates/timeseries endpoints.
     endpoint options: 'assets' or 'tokens'
@@ -75,10 +81,10 @@ def _timeseries_query(measure_slug, endpoint, group_by="asset_class",
             "mode": mode
         }
     }
-    query_param = quote(json.dumps(query)) # builds desired api format
+    query_param = quote(json.dumps(query))
     url = f"{BASE_URL}/v4/{endpoint}/aggregates/timeseries?query={query_param}"
     response = requests.get(url, headers=HEADERS)
-    response.raise_for_status() # Check for errors
+    response.raise_for_status()
     return response.json()
 
 
@@ -95,4 +101,3 @@ def get_holders_by_asset_class():
 def get_transfer_volume_by_asset_class():
     """Transfer volume by asset class, daily, flow mode. Summed to monthly in data_processing."""
     return _timeseries_query(MEASURE_VOLUME, endpoint="tokens", mode="flow")
-
