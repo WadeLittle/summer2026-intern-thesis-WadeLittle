@@ -1,21 +1,53 @@
-# Thesis — Is RWA Tokenization Undergoing a Structural Shift?
+# Thesis — Is RWA Tokenization a Structural Shift or Institutional Window Dressing?
 2026 Summer Internship Program · Market Intelligence Research Case Study
 
-## Project Overview
+## Thesis Question
 
-This project investigates whether financial institutions are structurally migrating real-world assets to blockchain-based infrastructure — treating on-chain settlement and custody as a superior alternative to legacy financial rails. The analysis tests this through three statistics backed pillars: whether asset-class composition is diversifying beyond tokenized Treasuries, whether wallet participation is broadening relative to capital inflows, and whether secondary market activity is keeping pace with circulating value.
+Are financial institutions structurally migrating real-world assets to blockchain-based infrastructure — treating on-chain settlement and custody as a superior alternative to legacy financial rails — or is this a temporary positioning strategy with limited staying power?
 
-The analysis is anchored to January 2024 (the BlackRock BUIDL launch), a widely recognized inflection point for institutional RWA adoption. Data is pulled live from the [rwa.xyz](https://rwa.xyz) API.
-
-The thesis is tested across three statistical pillars:
+The thesis is tested across five statistical pillars using live data from the [rwa.xyz](https://rwa.xyz) API:
 
 | Pillar | Question | Method |
 |--------|----------|--------|
-| 1 — Market Concentration | Is the market diversifying beyond US Treasury Debt? | HHI trend via OLS |
-| 2 — On-Chain Participation | Are more wallets participating relative to capital inflows? | Spearman ρ + Kendall τ |
-| 3 — Liquidity | Is transfer activity growing relative to circulating value? | Turnover ratio via OLS |
+| 1 — Growth | Is tokenized RWA value growing and at what rate? | OLS on log CAV, rolling growth trends |
+| 2 — Composition | Is growth diversifying beyond US Treasury Debt? | HHI trend, top-5 share, active class count (OLS) |
+| 3 — Adoption | Are more wallets participating relative to capital inflows? | OLS on log holders, Spearman ρ |
+| 4 — Liquidity | Is transfer activity growing with circulating value? | Turnover ratio OLS, Spearman ρ |
+| 5 — TradFi Benchmark | Is tokenized growth meaningful relative to comparable TradFi markets? | Relative growth rate, tokenized share of TradFi (OLS) |
 
-**Current tier: Lower/Bronze** — static statistical analysis + 3 charts + console report.
+---
+
+## Three-Tier Architecture
+
+This project is built in three independently runnable tiers. Each tier depends on the outputs of the tier below it, but does not require the tier above it to exist.
+
+```
+Bronze — Data pipeline, metrics, static charts, statistical analysis
+         Run via: python3 scripts/build_dataset.py
+                  python3 scripts/build_charts.py
+                  python3 scripts/run_analysis.py
+
+Silver — Streamlit dashboard built on top of Bronze outputs
+         Run via: streamlit run src/silver/app.py
+
+Gold   — Chatbot + optional live MCP data built on top of Silver
+         Run via: streamlit run src/gold/app.py
+```
+
+---
+
+## Build Status
+
+| Phase | Description | Status |
+|-------|-------------|--------|
+| 1 | Bronze: RWA Data Pipeline | ✅ Complete |
+| 1b | Bronze: TradFi Benchmark Pipeline | Planned |
+| 2 | Bronze: Metrics Layer | Planned |
+| 3 | Bronze: Static Charts | Planned |
+| 4 | Bronze: Statistical Analysis (5 pillars) | Planned |
+| 5 | Silver: Streamlit Dashboard | Planned |
+| 6 | Gold: Local Results Chatbot | Planned |
+| 7 | Gold: Optional MCP / Live Data | Planned |
 
 ---
 
@@ -24,16 +56,45 @@ The thesis is tested across three statistical pillars:
 ```
 summer2026-intern-thesis-WadeLittle/
 │
-├── src/
-│   ├── config.py            ← API key, measure slugs, asset class scope, date window
-│   ├── api_client.py        ← rwa.xyz API calls + 24-hour file cache
-│   ├── data_processing.py   ← Raw JSON → cleaned monthly DataFrame + pillar builders
-│   │
-│   └── bronze/
-│       └── analysis.py      ← Run: python src/bronze/analysis.py
+├── scripts/
+│   ├── build_dataset.py         ← Phase 1+1b+2: fetch, process, validate, save CSV
+│   ├── build_charts.py          ← Phase 3: load metrics → generate static PNGs
+│   └── run_analysis.py          ← Phase 4: load metrics → run stats → save results
 │
-├── charts/                  ← Auto-generated (created on first run)
-├── cache/                   ← Auto-generated API cache (gitignored)
+├── src/
+│   ├── __init__.py
+│   ├── config.py                ← Shared config: API credentials, asset scope, paths
+│   │
+│   └── bronze/                  ← All data pipeline, metrics, chart, and stats code
+│       ├── __init__.py
+│       ├── api_client.py        ← rwa.xyz API calls + 24-hour file cache
+│       ├── data_processing.py   ← Raw JSON → clean monthly DataFrame + metric builders
+│       ├── tradfi_client.py     ← yfinance benchmark fetcher (Phase 1b)
+│       ├── metrics.py           ← Derived metric functions (Phase 2)
+│       ├── metrics_config.py    ← Metric constants: windows, thresholds (Phase 2)
+│       ├── charts.py            ← Static chart functions (Phase 3)
+│       ├── stats.py             ← Statistical test functions (Phase 4)
+│       └── analysis.py          ← Legacy entry point (being phased out)
+│
+├── results/                     ← All pipeline outputs (gitignored except .gitkeep)
+│   ├── combined_monthly.csv     ← Phase 1 output: base dataset
+│   ├── combined_metrics.csv     ← Phase 2 output
+│   ├── concentration_metrics.csv
+│   ├── tradfi_benchmarks.csv
+│   ├── tradfi_comparison.csv
+│   ├── stats_summary.json       ← Phase 4 output
+│   ├── conclusion.txt
+│   └── statistical_results.csv
+│
+├── tests/
+│   ├── test_data_processing.py  ← Phase 1 tests (24 tests, all passing)
+│   ├── test_metrics.py          ← Phase 2 tests (planned)
+│   └── test_stats.py            ← Phase 4 tests (planned)
+│
+├── charts/                      ← Static chart PNGs (Phase 3 output)
+├── cache/                       ← 24-hour API response cache (gitignored)
+├── data/
+│   └── benchmarks/              ← Manual seed data for TradFi benchmarks (Phase 1b)
 ├── requirements.txt
 ├── .env.example
 └── README.md
@@ -53,41 +114,83 @@ pip install -r requirements.txt
 
 ### 2. Configure your API key
 
-Copy `.env.example` to `.env` and add your rwa.xyz API key:
-
 ```bash
 cp .env.example .env
-# then open .env and set: RWA_API_KEY=your_key_here
+# open .env and set: RWA_API_KEY=your_key_here
 ```
 
-### 3. Run the Bronze tier analysis
+### 3. Build the dataset (Phase 1)
 
 ```bash
-python src/bronze/analysis.py
+python3 scripts/build_dataset.py
 ```
 
-**What it does:**
+This fetches CAV, holder counts, and transfer volume from rwa.xyz (cached for 24 hours), validates the output, prints a data quality summary, and saves the base dataset to `results/combined_monthly.csv`.
 
-- Fetches CAV, holder counts, and transfer volume from the rwa.xyz API (cached for 24 hours)
-- Generates 5 charts saved to `./charts/`:
-  - `chart1_composition.png` — 100% stacked area: share of circulating asset value by class
-  - `chart2_adoption.png` — 2×2 subplots: CAV index vs. holder index per asset class
-  - `chart2b_avg_position.png` — 2×2 subplots: average dollar value held per wallet per asset class
-  - `chart2c_adoption_context.png` — 4×3 grid: raw holders | raw CAV | index, one row per asset class
-  - `chart3_liquidity.png` — monthly turnover ratio with 3-month rolling average
-- Prints a full statistical summary to the console (HHI OLS, Spearman/Kendall per asset class, liquidity OLS)
-- Prints a plain-English thesis conclusion with an overall verdict
+### 4. Verify the output
+
+```bash
+head -5 results/combined_monthly.csv
+
+python3 -c "
+import pandas as pd
+df = pd.read_csv('results/combined_monthly.csv')
+print(df.dtypes)
+print(df['date'].min(), df['date'].max())
+print(df['asset_class'].unique())
+"
+```
+
+### 5. Run the test suite
+
+```bash
+python3 -m pytest tests/ -v
+```
 
 ---
 
 ## Asset Classes in Scope
 
-| Asset Class | Description |
-|-------------|-------------|
-| US Treasury Debt | Tokenized T-bills and government bonds |
-| Commodities | Tokenized gold and other commodities |
-| Real Estate | Tokenized real estate funds and properties |
-| Stocks | Tokenized equities |
+Thirteen traditional RWA asset classes are included in the primary analysis. Stablecoins, Cryptocurrencies, and Fiat Currency are tracked separately — they behave as digital-native or currency-proxy instruments rather than tokenized real-world assets and would distort concentration and adoption metrics if included.
+
+| Asset Class | Category |
+|-------------|----------|
+| US Treasury Debt | Fixed Income |
+| Corporate Credit | Fixed Income |
+| Asset-Backed Credit | Fixed Income |
+| Diversified Credit | Fixed Income |
+| non-US Government Debt | Fixed Income |
+| Repurchase Agreements | Fixed Income |
+| Real Estate | Alternative |
+| Private Equity | Alternative |
+| Venture Capital | Alternative |
+| Active Strategies | Alternative |
+| Specialty Finance | Alternative |
+| Stocks | Equity |
+| Commodities | Real Assets |
+
+**Supplemental (tracked separately):** Stablecoins · Cryptocurrencies · Fiat Currency
+
+---
+
+## Phase 1 Output
+
+`results/combined_monthly.csv` — 493 rows, 13 asset classes, 2023-01 to 2026-05.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `date` | string (YYYY-MM-DD) | Month-start date |
+| `asset_class` | string | One of the 13 in-scope classes |
+| `cav` | float | Average monthly circulating asset value (USD) |
+| `holders` | float | End-of-month holder count |
+| `volume` | float | Total monthly transfer volume (USD) |
+
+Data quality guarantees enforced at build time:
+- Date range starts no earlier than 2023-01-01
+- Partial current month excluded
+- No negative CAV rows
+- Missing holders/volume filled with 0 (zero activity, not missing data)
+- CAV gaps left as NaN (absence of data ≠ zero value)
 
 ---
 
@@ -97,114 +200,54 @@ python src/bronze/analysis.py
 |------|---------|
 | Python 3.x | Core language |
 | pandas / numpy | Data manipulation and computation |
-| matplotlib | Chart generation |
-| scipy / statsmodels | Statistical tests (OLS, Spearman, Kendall) |
+| matplotlib | Static chart generation (Phase 3) |
+| scipy / statsmodels | Statistical tests: OLS, Spearman, Kendall (Phase 4) |
+| yfinance | TradFi benchmark data (Phase 1b) |
+| streamlit | Interactive dashboard (Phase 5+) |
 | python-dotenv | API key management via `.env` |
+| pytest | Test suite |
 | rwa.xyz API | Live RWA market data |
 
 ---
 
-## Statistical Methods
+## Statistical Methods (Phase 4)
 
-### OLS Regression (Pillars 1 and 3)
+### OLS Regression (Pillars 1, 2, 4, 5)
 
-Fits a straight line through the metric over time. The slope (β) quantifies direction and speed of the trend; the p-value tells you whether that slope is distinguishable from zero with statistical confidence.
+Fits a trend line through the metric over time. The slope (β) quantifies direction and speed; the p-value indicates whether that slope is distinguishable from zero. Confidence intervals are included in all OLS outputs.
 
-**Why chosen:** Both HHI (concentration) and turnover ratio are single continuous metrics where the core question is simply whether they are trending up or down over time. OLS is the most direct tool for that.
-
-**Limitations:**
-- Assumes the relationship is linear — concentration could drop sharply then plateau, which a straight line misrepresents
-- Sensitive to outliers; one anomalous month can shift the slope meaningfully
-- Small sample (~18 months) makes it harder to reach significance even when a real trend exists
+**Limitations:** Assumes linearity; sensitive to outliers; short time series reduces statistical power.
 
 ---
 
-### Spearman Correlation (Pillar 2)
+### Spearman Correlation (Pillars 3, 4)
 
-Measures whether the CAV index and holder index move in the same direction over time. Unlike standard Pearson correlation, Spearman works on ranks rather than raw values, so it does not assume the relationship is linear.
+Measures whether two metrics move in the same direction over time. Rank-based, so it does not assume a linear relationship or equal scales.
 
-**Why chosen:** CAV and holder counts can grow at very different rates and scales. A rank-based method is more appropriate than Pearson because it captures whether the two metrics move in sync without being distorted by magnitude differences.
-
-**Limitations:**
-- Tells you *whether* they move together but not *by how much* or *who is leading*
-- Both metrics trend upward in a growing market almost by definition, so a high ρ may partly reflect a shared time trend rather than a meaningful relationship between the two specifically
+**Limitations:** Captures co-movement direction, not magnitude or causation. Both metrics trending upward in a growing market can produce high ρ from shared time trend rather than a meaningful relationship.
 
 ---
 
-### Kendall Tau (Pillar 2)
+### Kendall Tau (Pillar 3)
 
-Tests whether the participation ratio (holders index / CAV index) shows a consistent monotonic trend — meaning it moves mostly in one direction rather than bouncing randomly. A positive τ means holders are generally outpacing CAV (broadening adoption); negative means CAV is outpacing holders (concentration).
+Tests whether the participation ratio (holders index / CAV index) shows consistent monotonic movement. Positive τ = holders outpacing CAV (broadening adoption); negative τ = CAV outpacing holders (concentration).
 
-**Why chosen:** The participation ratio is the direct measure of whether adoption is broadening. Kendall tau tests whether the *directional consistency* of that ratio holds across the full time period, which is more meaningful than just comparing start and end values. It is also more robust than OLS for ratio data that can be volatile month to month.
-
-**Limitations:**
-- Only captures directional consistency, not magnitude — a ratio that ticked up by 0.001 every month gets the same positive τ as one that surged
-- Short time series limits statistical power here as well
+**Limitations:** Captures directional consistency only, not magnitude. Short time series limits power.
 
 ---
 
+### Relative Growth Index (Pillar 3)
+
+Each asset class is indexed to its own first valid monthly observation = 100. This shows relative growth *within* each class, not absolute adoption size. Baseline quality flags (`low_cav_baseline_flag`, `low_holders_baseline_flag`, `late_start_flag`) are attached to every row so that small or late baselines are visible when interpreting results.
+
+---
 
 ## Limitations
 
 - Correlation ≠ causation; structural-shift signals may reflect macro conditions (rate environment, regulatory clarity) rather than tokenization-specific dynamics
-- Analysis window starts Jan 2024 — a short time series limits statistical power
-- Single API source (rwa.xyz); coverage gaps in smaller asset classes may affect results
+- Single data source (rwa.xyz); coverage gaps in smaller asset classes may affect completeness
+- Holder count is an on-chain wallet proxy, not a perfect measure of unique users — one institution can control multiple wallets
+- TradFi comparisons are benchmarks, not perfect equivalents; differences in market structure, liquidity, regulation, and product design must be considered
+- Short overall time series (starting 2023-01) limits statistical power for trend detection
 - Asset classes analyzed in isolation, not in portfolio context
-
-
-## Results
-
-*Data: rwa.xyz API · Period: Jan 2024–May 2026 · n = 29 months*
-
-### Pillar 1 — Market Concentration (HHI)
-
-*Scale: 1.0 = one class dominates · 0.25 = equal weight across all four classes*
-
-| Metric | Value |
-|--------|-------|
-| Start HHI | 0.4922 |
-| End HHI | 0.4709 |
-| OLS β/month | -0.00119 |
-| p-value | 0.224 |
-| R² | 0.054 |
-
-No statistically significant trend. The RWA market remained heavily concentrated throughout the period.
-
----
-
-### Pillar 2 — On-Chain Participation
-
-*Spearman ρ: correlation between CAV index and holder index*
-*Kendall τ: monotonic trend in participation ratio (holders/CAV) — positive = broadening*
-
-| Asset Class | Spearman ρ | p | Kendall τ | p | Ratio (start → end) |
-|-------------|-----------|---|-----------|---|---------------------|
-| US Treasury Debt | +0.967 | <0.001 ** | +0.365 | 0.005 ** | 1.00 → 1.07 |
-| Commodities | +0.997 | <0.001 ** | -0.458 | <0.001 ** | 1.00 → 0.65 |
-| Real Estate | +0.993 | <0.001 ** | -0.586 | <0.001 ** | 1.00 → 0.21 |
-| Stocks | +0.933 | <0.001 ** | +0.557 | <0.001 ** | 1.00 → 5.81 |
-
-Participation broadened in 2 of 4 classes (Stocks, US Treasury Debt). In Commodities and Real Estate, value growth significantly outpaced wallet participation — consistent with institutional concentration rather than broad adoption.
-
----
-
-### Pillar 3 — Liquidity (3-month rolling turnover OLS)
-
-*β/month: change in monthly turnover ratio per month — positive = improving liquidity*
-
-| Asset Class | β/month | p | R² |
-|-------------|---------|---|----|
-| US Treasury Debt | -0.00965 | 0.004 ** | 0.269 |
-| Commodities | +0.06619 | <0.001 ** | 0.777 |
-| Real Estate | -0.00427 | 0.215 | 0.056 |
-| Stocks | +0.09520 | <0.001 ** | 0.669 |
-
-*\*\* p<0.01 · \* p<0.05 · ~ p<0.10*
-
-Liquidity improved significantly in 2 of 4 classes (Commodities, Stocks). Treasury Debt showed a statistically significant *decline* in turnover. Real Estate was flat.
-
----
-
-### Verdict
-
-The data provides **mixed but directionally positive evidence**. Some structural shift signals are present — participation broadening in Stocks and Treasuries, strong liquidity growth in Commodities and Stocks — but they are not consistent across all asset classes or all three pillars. Caution is warranted in characterizing this as a broad structural shift; it may reflect early-stage diversification rather than a sustained trend.
+- Results with insufficient sample size are flagged `insufficient_data` in the statistical output rather than reported as weak/no effect
