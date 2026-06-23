@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 # Copyright (c) 2026 Wade Little. All rights reserved.
 """
-Build the combined monthly RWA dataset.
+Build the combined monthly RWA dataset and Bronze metrics layer.
 
-Fetches (or loads from 24-hour cache) rwa.xyz API data, transforms it into a
-clean monthly dataset, validates it, and saves to results/combined_monthly.csv.
+Phase 1 — Fetches (or loads from 24-hour cache) rwa.xyz API data, transforms
+           it into a clean monthly dataset, and saves combined_monthly.csv.
+Phase 2 — Computes all derived metrics and saves:
+             combined_metrics.csv      (per-asset-class metrics)
+             concentration_metrics.csv (market-level concentration metrics)
 
 Usage (from repo root):
     python scripts/build_dataset.py
@@ -28,6 +31,7 @@ from src.bronze.data_processing import (
     save_combined_dataset,
     print_data_quality_summary,
 )
+from src.bronze.metrics import build_all_metrics, save_metrics
 from src.config import ASSET_CLASSES_IN_SCOPE, RESULTS_DIR
 
 
@@ -48,21 +52,18 @@ def _log_missing_classes(df):
 
 
 def main():
-    print("[build_dataset] Phase 1 — Bronze: building combined monthly dataset")
+    print("[build_dataset] Building Bronze dataset and metrics layer")
     print(f"[build_dataset] Output directory: {RESULTS_DIR}/")
 
-    # ── Fetch ────────────────────────────────────────────────────────────────
+    # ── Phase 1: Fetch + clean ────────────────────────────────────────────────
     cav, holders, volume = _fetch_all()
 
-    # ── Transform ────────────────────────────────────────────────────────────
     print("[build_dataset] Building combined monthly dataset...")
     df = build_combined_dataset(cav, holders, volume)
 
-    # ── Data quality summary ─────────────────────────────────────────────────
     print_data_quality_summary(df)
     _log_missing_classes(df)
 
-    # ── Validate ─────────────────────────────────────────────────────────────
     errors = validate_dataset(df)
     if errors:
         print("[build_dataset] VALIDATION ERRORS — dataset will not be saved:")
@@ -72,9 +73,19 @@ def main():
 
     print("[build_dataset] All validation checks passed.")
 
-    # ── Save ─────────────────────────────────────────────────────────────────
-    output_path = save_combined_dataset(df, RESULTS_DIR)
-    print(f"[build_dataset] Saved {len(df):,} rows to {output_path}")
+    combined_monthly_path = save_combined_dataset(df, RESULTS_DIR)
+    print(f"[build_dataset] Saved {len(df):,} rows → {combined_monthly_path}")
+
+    # ── Phase 2: Metrics ──────────────────────────────────────────────────────
+    print("[build_dataset] Computing Bronze metrics layer...")
+    combined_metrics_df, concentration_df = build_all_metrics(df)
+
+    metrics_path, concentration_path = save_metrics(
+        combined_metrics_df, concentration_df, RESULTS_DIR
+    )
+    print(f"[build_dataset] Saved {len(combined_metrics_df):,} rows → {metrics_path}")
+    print(f"[build_dataset] Saved {len(concentration_df):,} rows → {concentration_path}")
+
     print("[build_dataset] Done.")
 
 

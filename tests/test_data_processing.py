@@ -16,9 +16,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.bronze.data_processing import (
+from src.bronze.data_processing import validate_dataset
+from src.bronze.metrics import (
     build_relative_growth_index,
-    validate_dataset,
     validate_growth_index,
     MIN_BASELINE_CAV,
     MIN_BASELINE_HOLDERS,

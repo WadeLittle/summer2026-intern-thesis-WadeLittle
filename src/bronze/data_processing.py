@@ -1,10 +1,12 @@
 # Copyright (c) 2026 Wade Little. All rights reserved.
 """
-Transforms raw rwa.xyz API responses into a single cleaned,
-long-format DataFrame ready for analysis.
+Raw-to-clean transformation: converts rwa.xyz API responses into a single
+cleaned, long-format monthly DataFrame ready for the metrics layer.
 
 Pipeline: raw JSON (per measure) -> long DataFrame (per measure)
           -> merged combined DataFrame -> validated/windowed DataFrame -> CSV
+
+Derived metric logic lives in src/bronze/metrics.py.
 """
 
 import os
@@ -13,13 +15,11 @@ import pandas as pd
 
 from src.config import ANALYSIS_START_DATE, ASSET_CLASSES_IN_SCOPE, RESULTS_DIR
 
+# Re-export baseline constants so existing callers don't break.
+from src.bronze.metrics_config import MIN_BASELINE_CAV, MIN_BASELINE_HOLDERS  # noqa: F401
+
 _REQUIRED_COLUMNS = {"date", "asset_class", "cav", "holders", "volume"}
 _NUMERIC_COLUMNS = ["cav", "holders", "volume"]
-
-# Thresholds below which a baseline value is flagged as potentially unreliable.
-# Low baselines cause indexed growth to look exaggerated relative to real-world scale.
-MIN_BASELINE_CAV = 1_000_000        # $1M minimum credible CAV baseline
-MIN_BASELINE_HOLDERS = 10           # 10 holders minimum credible baseline
 
 
 # ─────────────────────────────────────────────
@@ -157,167 +157,6 @@ def build_combined_dataset(aum_data, holders_data, volume_data):
 
 
 # ─────────────────────────────────────────────
-# Downstream metric builders
-# ─────────────────────────────────────────────
-
-def build_composition_shares(df):
-    """
-    Pillar 1: Each asset class's % share of total CAV per month.
-    Adds 'cav_share' column (0–1).
-    """
-    df = df.copy()
-    monthly_total = df.groupby("date")["cav"].transform("sum")
-    df["cav_share"] = df["cav"] / monthly_total
-    return df
-
-
-def build_relative_growth_index(df):
-    """
-    Pillar 2: Within-asset-class relative growth index.
-
-    Each asset class is indexed to its own first valid monthly observation = 100.
-    This shows relative growth *within* each class, not absolute adoption size.
-    Small or late baselines may exaggerate growth percentages; always interpret
-    the index alongside cav_baseline, holders_baseline, and the baseline flags.
-
-    Added columns:
-      cav_index                           — CAV relative to first valid month (100 = baseline)
-      holders_index                       — holders relative to first valid month (100 = baseline)
-      participation_ratio                 — holders_index / cav_index (directional only)
-      cav_baseline                        — absolute CAV value at the baseline month
-      holders_baseline                    — absolute holders value at the baseline month
-      cav_baseline_date                   — date the CAV baseline was taken
-      holders_baseline_date               — date the holders baseline was taken
-      cav_absolute_change_from_baseline   — cav - cav_baseline
-      holders_absolute_change_from_baseline — holders - holders_baseline
-      low_cav_baseline_flag               — True if cav_baseline < MIN_BASELINE_CAV
-      low_holders_baseline_flag           — True if holders_baseline < MIN_BASELINE_HOLDERS
-      late_start_flag                     — True if the first valid month is after ANALYSIS_START_DATE
-
-    Index values are NaN before the first valid baseline month for each class.
-    No index is calculated when the baseline is null, zero, or negative.
-
-    participation_ratio > 1: holders grew faster than CAV relative to their shared baseline.
-    participation_ratio < 1: CAV grew faster than holders relative to their shared baseline.
-    This is directional only and does not prove decentralization, unique user growth,
-    or absolute adoption strength.
-    """
-    df = df.copy()
-    analysis_start = pd.Timestamp(ANALYSIS_START_DATE)
-
-    group_frames = []
-    for asset_class, group in df.groupby("asset_class", sort=False):
-        g = group.sort_values("date").copy()
-
-        # First valid (positive, non-null) CAV baseline.
-        cav_valid = g[g["cav"].notna() & (g["cav"] > 0)]
-        cav_base_val = cav_valid["cav"].iloc[0] if not cav_valid.empty else None
-        cav_base_date = cav_valid["date"].iloc[0] if not cav_valid.empty else None
-
-        # First valid (positive) holders baseline.
-        holders_valid = g[g["holders"].notna() & (g["holders"] > 0)]
-        holders_base_val = holders_valid["holders"].iloc[0] if not holders_valid.empty else None
-        holders_base_date = holders_valid["date"].iloc[0] if not holders_valid.empty else None
-
-        # Baseline-quality flags.
-        g["cav_baseline"] = cav_base_val
-        g["cav_baseline_date"] = cav_base_date
-        g["holders_baseline"] = holders_base_val
-        g["holders_baseline_date"] = holders_base_date
-
-        g["low_cav_baseline_flag"] = bool(
-            cav_base_val is not None and cav_base_val < MIN_BASELINE_CAV
-        )
-        g["low_holders_baseline_flag"] = bool(
-            holders_base_val is not None and holders_base_val < MIN_BASELINE_HOLDERS
-        )
-
-        # late_start_flag: first valid month is after the global analysis start.
-        valid_dates = [d for d in [cav_base_date, holders_base_date] if d is not None]
-        first_valid = min(valid_dates) if valid_dates else None
-        g["late_start_flag"] = bool(first_valid is not None and first_valid > analysis_start)
-
-        # CAV index — NaN before baseline date; requires valid baseline.
-        g["cav_index"] = np.nan
-        g["cav_absolute_change_from_baseline"] = np.nan
-        if cav_base_val is not None and cav_base_date is not None:
-            after_base = g["date"] >= cav_base_date
-            has_cav = g["cav"].notna()
-            mask = after_base & has_cav
-            g.loc[mask, "cav_index"] = g.loc[mask, "cav"] / cav_base_val * 100
-            g.loc[mask, "cav_absolute_change_from_baseline"] = g.loc[mask, "cav"] - cav_base_val
-
-        # Holders index — NaN before baseline date; requires valid baseline.
-        g["holders_index"] = np.nan
-        g["holders_absolute_change_from_baseline"] = np.nan
-        if holders_base_val is not None and holders_base_date is not None:
-            after_base = g["date"] >= holders_base_date
-            has_holders = g["holders"].notna()
-            mask = after_base & has_holders
-            g.loc[mask, "holders_index"] = g.loc[mask, "holders"] / holders_base_val * 100
-            g.loc[mask, "holders_absolute_change_from_baseline"] = (
-                g.loc[mask, "holders"] - holders_base_val
-            )
-
-        group_frames.append(g)
-
-    if not group_frames:
-        return df
-
-    out = pd.concat(group_frames, ignore_index=True)
-
-    # participation_ratio: only where both indexes are valid and positive.
-    both_valid = (
-        out["cav_index"].notna() & out["holders_index"].notna()
-        & (out["cav_index"] > 0) & (out["holders_index"] > 0)
-    )
-    out["participation_ratio"] = np.nan
-    out.loc[both_valid, "participation_ratio"] = (
-        out.loc[both_valid, "holders_index"] / out.loc[both_valid, "cav_index"]
-    )
-
-    return out
-
-
-def build_adoption_index(df):
-    """
-    Backward-compatible alias for build_relative_growth_index.
-
-    Prefer calling build_relative_growth_index directly in new code.
-    The index measures within-asset-class relative growth from each class's
-    own first valid observation = 100. It is not an absolute adoption ranking.
-    """
-    return build_relative_growth_index(df)
-
-
-def build_avg_position_size(df):
-    """
-    Pillar 2: Average dollar value held per wallet per asset class per month.
-    avg_position = CAV / holders. Declining trend = new smaller participants
-    entering (broadening adoption). Rising trend = existing holders adding
-    capital (concentration).
-    """
-    df = df.copy()
-    df["avg_position"] = df["cav"] / df["holders"].replace(0, float("nan"))
-    return df
-
-
-def build_turnover_ratio(df):
-    """
-    Pillar 3: Turnover ratio = monthly transfer volume / average monthly CAV.
-    Adds turnover_ratio and turnover_3m (3-month rolling average per asset class) columns.
-    """
-    df = df.copy()
-    df["turnover_ratio"] = df["volume"] / df["cav"]
-    df["turnover_3m"] = (
-        df.sort_values("date")
-        .groupby("asset_class")["turnover_ratio"]
-        .transform(lambda s: s.rolling(3, min_periods=1).mean())
-    )
-    return df
-
-
-# ─────────────────────────────────────────────
 # Validation
 # ─────────────────────────────────────────────
 
@@ -358,56 +197,8 @@ def validate_dataset(df):
     return errors
 
 
-def validate_growth_index(df):
-    """
-    Additional validation for DataFrames produced by build_relative_growth_index.
-    Returns a list of error strings. Checks:
-      - Baseline flag columns exist and are boolean
-      - No index value is calculated from a zero or negative baseline
-      - Rows before the baseline month have null index values
-      - participation_ratio is null unless both indexes are valid and positive
-    """
-    errors = []
-
-    flag_cols = ["low_cav_baseline_flag", "low_holders_baseline_flag", "late_start_flag"]
-    for col in flag_cols:
-        if col not in df.columns:
-            errors.append(f"Missing baseline flag column: '{col}'")
-        elif not pd.api.types.is_bool_dtype(df[col]):
-            errors.append(f"Column '{col}' should be boolean (dtype: {df[col].dtype})")
-
-    if "cav_index" in df.columns and "cav_baseline" in df.columns:
-        bad = df["cav_index"].notna() & df["cav_baseline"].notna() & (df["cav_baseline"] <= 0)
-        if bad.any():
-            errors.append(f"{bad.sum()} row(s) have cav_index calculated from a non-positive baseline")
-
-    if "holders_index" in df.columns and "holders_baseline" in df.columns:
-        bad = df["holders_index"].notna() & df["holders_baseline"].notna() & (df["holders_baseline"] <= 0)
-        if bad.any():
-            errors.append(f"{bad.sum()} row(s) have holders_index calculated from a non-positive baseline")
-
-    if all(c in df.columns for c in ["cav_index", "cav_baseline_date", "date"]):
-        pre_base = df.merge(
-            df.groupby("asset_class")["cav_baseline_date"].first().reset_index(),
-            on="asset_class", suffixes=("", "_min")
-        )
-        before_base = pre_base["date"] < pre_base["cav_baseline_date_min"]
-        leaked = before_base & pre_base["cav_index"].notna()
-        if leaked.any():
-            errors.append(f"{leaked.sum()} row(s) have cav_index set before the baseline date")
-
-    if "participation_ratio" in df.columns:
-        cav_ok = df["cav_index"].notna() & (df["cav_index"] > 0)
-        holders_ok = df["holders_index"].notna() & (df["holders_index"] > 0)
-        should_be_null = ~(cav_ok & holders_ok)
-        spurious = should_be_null & df["participation_ratio"].notna()
-        if spurious.any():
-            errors.append(
-                f"{spurious.sum()} row(s) have participation_ratio set "
-                f"where one or both indexes are invalid/non-positive"
-            )
-
-    return errors
+# validate_growth_index moved to src/bronze/metrics.py; re-exported for backward compat.
+from src.bronze.metrics import validate_growth_index  # noqa: F401, E402
 
 
 # ─────────────────────────────────────────────
