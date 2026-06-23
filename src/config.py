@@ -19,7 +19,7 @@ CACHE_DIR = "cache"
 CACHE_TTL_SECONDS = 24 * 60 * 60  # 24 hours, matches rwa.xyz's daily update cadence
 
 CHARTS_DIR = "charts"
-RESULTS_DIR = "results"
+RESULTS_DIR = "data"
 
 # API filter date — set early to capture all available history.
 ANALYSIS_START_DATE = "2023-01-01"

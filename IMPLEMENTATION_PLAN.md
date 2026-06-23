@@ -12,7 +12,6 @@
 | Is the market less concentrated? | HHI, top-5 share | HHI line chart | HHI trend (OLS) |
 | Is adoption growing with assets? | holders, holders per $1M CAV | CAV vs holders scatterplot | log holders vs log CAV (OLS) |
 | Is liquidity growing with assets? | volume, turnover | CAV vs turnover scatterplot | turnover vs log CAV (OLS + Spearman) |
-| Is growth meaningful vs TradFi? | tokenized share of TradFi | benchmark share chart | relative growth comparison |
 
 ---
 
@@ -66,19 +65,19 @@ This phase produces data only. No charts. No metrics. No stats. No Streamlit.
 
 | Action | File | What changes |
 |---|---|---|
-| Modify | `src/config.py` | Set `ANALYSIS_START_DATE = "2023-01-01"`. Move Stablecoins and Cryptocurrencies out of the main RWA scope (track separately). Add `RESULTS_DIR = "results"`. |
+| Modify | `src/config.py` | Set `ANALYSIS_START_DATE = "2023-01-01"`. Move Stablecoins and Cryptocurrencies out of the main RWA scope (track separately). Add `RESULTS_DIR = "data"`. |
 | Move/Modify | `src/bronze/api_client.py` | Move from `src/api_client.py`. Preserve existing API request behavior. Only the smallest import-path changes needed so scripts run from the repo root without `sys.path` manipulation. |
 | Move/Modify | `src/bronze/data_processing.py` | Move from `src/data_processing.py`. Add or update logic to build and save a combined monthly dataset. Add input validation for required columns, dates, numeric fields, and negative values. |
 | Create | `src/__init__.py` | Empty file to establish `src` as a package. |
 | Create | `src/bronze/__init__.py` | Empty file to establish `src/bronze` as a package. |
 | Create | `scripts/build_dataset.py` | Standalone script: fetch/load cache → process → validate → save CSV. |
-| Create | `results/` | Output folder. Include `.gitkeep`. |
+| Create | `data/` | Output folder. Include `.gitkeep`. |
 
 ---
 
 ## Required Output
 
-`results/combined_monthly.csv`
+`data/combined_monthly.csv`
 
 Required columns:
 
@@ -107,7 +106,7 @@ Running twice within the cache TTL must use cached data.
 ## Acceptance Criteria
 
 * `python scripts/build_dataset.py` runs from the repo root without error.
-* `results/combined_monthly.csv` is produced with: `date, asset_class, cav, holders, volume`.
+* `data/combined_monthly.csv` is produced with: `date, asset_class, cav, holders, volume`.
 * Date range starts no earlier than `2023-01-01`.
 * No row has negative CAV.
 * Missing classes or fields are logged clearly.
@@ -122,84 +121,20 @@ Running twice within the cache TTL must use cached data.
 ```bash
 pip install -r requirements.txt
 python scripts/build_dataset.py
-head -5 results/combined_monthly.csv
-python -c "import pandas as pd; df = pd.read_csv('results/combined_monthly.csv'); print(df.dtypes); print(df['date'].min(), df['date'].max()); print(df['asset_class'].unique())"
+head -5 data/combined_monthly.csv
+python -c "import pandas as pd; df = pd.read_csv('data/combined_monthly.csv'); print(df.dtypes); print(df['date'].min(), df['date'].max()); print(df['asset_class'].unique())"
 ```
 
 ---
 
-# Phase 1b — Bronze: TradFi Benchmark Pipeline
+# Phase 1b — REMOVED
 
-## Goal
+## Decision
 
-Pull and cache TradFi benchmark data from a free API (Yahoo Finance via `yfinance`) to enable the Pillar 5 comparison in Phase 4. This runs alongside or immediately after Phase 1.
+Phase 1b was originally planned as a TradFi benchmark pipeline using yfinance to pull historical market data for comparison against tokenized asset classes. 
 
-This phase produces benchmark data only.
-
----
-
-## Why yfinance
-
-`yfinance` is free, requires no API key, covers the required asset classes, and supports the needed date range. Responses should be cached locally with the same TTL approach used for RWA data.
-
----
-
-## Files to Create or Modify
-
-| Action | File | What changes |
-|---|---|---|
-| Create | `src/bronze/tradfi_client.py` | Fetches benchmark data from yfinance with local caching. |
-| Create | `data/benchmarks/tradfi_benchmarks.csv` | Manually curated seed file for benchmarks not available in yfinance (optional fallback). |
-| Modify | `scripts/build_dataset.py` | After RWA data, also fetch and save TradFi benchmark data. |
-| Modify | `requirements.txt` | Add `yfinance`. |
-
----
-
-## Benchmark Targets
-
-| Benchmark | Ticker / Proxy | Comparison |
-|---|---|---|
-| U.S. Treasuries / Money Markets | `^IRX`, `SHY`, or manual AUM seed | Tokenized Treasuries |
-| Private Credit | Manual seed or `^GSPC` proxy | Tokenized private credit |
-| Gold | `GLD` or `GC=F` | Tokenized commodities/gold |
-| Broad ETF/Funds | `SPY` AUM proxy | Tokenized funds |
-| Real Estate | `VNQ` | Tokenized real estate |
-
----
-
-## Required Output
-
-`results/tradfi_benchmarks.csv`
-
-Required columns:
-
-```text
-date
-benchmark_name
-asset_class
-tradfi_value
-source
-notes
-```
-
-Rules:
-
-```text
-Date range should match or exceed the RWA analysis window (2023-01-01 to latest month).
-Values should represent AUM or market size, not price.
-Cached locally to avoid redundant API calls.
-If a benchmark cannot be fetched, log it clearly and skip rather than crashing.
-```
-
----
-
-## Acceptance Criteria
-
-* `python scripts/build_dataset.py` produces `results/tradfi_benchmarks.csv`.
-* At least 3 benchmark series are present.
-* Dates align with the RWA data range.
-* Cached data is used on second run within TTL.
-* Missing benchmarks are logged, not silently dropped.
+This phase was removed due to the struggle to find good data that can be used to compare against the pulled RWA data. The data wasn't strong enough to strengthen the overall analysis
+and thesis argument. To avoid unnecessary noise, I have decided to remove this tradfi comparison at this point.
 
 ---
 
@@ -263,18 +198,11 @@ turnover_3m                # 3-month rolling average of turnover_ratio
 monthly_volume_growth      # month-over-month % change in volume
 ```
 
-### Pillar 5 — TradFi Benchmark
-
-```text
-tokenized_share_of_tradfi  # tokenized_cav / tradfi_value per benchmark pair
-relative_growth_rate       # monthly_cav_growth - tradfi_growth per benchmark pair
-```
-
 ---
 
 ## Required Outputs
 
-`results/combined_metrics.csv` columns:
+`data/combined_metrics.csv` columns:
 
 ```text
 date, asset_class, cav, holders, volume,
@@ -283,25 +211,18 @@ holders_index, monthly_holder_growth, holders_per_million_cav, avg_position,
 turnover_ratio, turnover_3m, monthly_volume_growth
 ```
 
-`results/concentration_metrics.csv` columns:
+`data/concentration_metrics.csv` columns:
 
 ```text
 date, total_cav, monthly_cav_growth, rolling_3m_cav_growth, rolling_6m_cav_growth,
 hhi, top_5_share, asset_class_count, active_asset_class_count
 ```
 
-`results/tradfi_comparison.csv` columns:
-
-```text
-date, benchmark_name, asset_class, tokenized_cav, tradfi_value,
-tokenized_share_of_tradfi, relative_growth_rate
-```
-
 ---
 
 ## Acceptance Criteria
 
-* `python scripts/build_dataset.py` produces all three metric output files.
+* `python scripts/build_dataset.py` produces both metric output files.
 * `cav_share` sums to approximately 1.0 for every date where CAV data is available.
 * `cav_index` equals exactly 100 for each asset class at its first non-null, positive CAV month.
 * No division-by-zero errors when `holders == 0` or `cav == 0`.
@@ -314,8 +235,8 @@ tokenized_share_of_tradfi, relative_growth_rate
 ```bash
 python scripts/build_dataset.py
 python -m pytest tests/test_metrics.py -v
-python -c "import pandas as pd; df = pd.read_csv('results/combined_metrics.csv', parse_dates=['date']); print(df.columns.tolist()); print(df.tail())"
-python -c "import pandas as pd; hhi = pd.read_csv('results/concentration_metrics.csv'); print(hhi.tail())"
+python -c "import pandas as pd; df = pd.read_csv('data/combined_metrics.csv', parse_dates=['date']); print(df.columns.tolist()); print(df.tail())"
+python -c "import pandas as pd; hhi = pd.read_csv('data/concentration_metrics.csv'); print(hhi.tail())"
 ```
 
 ---
@@ -349,8 +270,7 @@ chart5_turnover_ratio.png         — turnover ratio over time
 chart6_rolling_growth.png         — rolling 3m and 6m CAV growth rates
 chart7_cav_vs_holders.png         — log CAV vs log holders scatterplot
 chart8_cav_vs_turnover.png        — log CAV vs turnover scatterplot
-chart9_tradfi_comparison.png      — tokenized share of TradFi benchmarks
-chart10_scorecard.png             — thesis scorecard summary (if data supports it)
+chart9_scorecard.png              — thesis scorecard summary (if data supports it)
 ```
 
 At minimum, produce charts 1–5.
@@ -359,7 +279,7 @@ At minimum, produce charts 1–5.
 
 ## Chart Requirements
 
-* Charts must read from `results/combined_metrics.csv`, `results/concentration_metrics.csv`, and `results/tradfi_comparison.csv`.
+* Charts must read from `data/combined_metrics.csv` and `data/concentration_metrics.csv`.
 * No API calls.
 * No statistical tests.
 * Save PNG files to `charts/`. Save SVG or PDF versions where easy.
@@ -394,7 +314,7 @@ ls -lh charts/
 
 ## Goal
 
-Create a clean statistical analysis layer that evaluates the thesis across five pillars using the metrics outputs. Produce structured results and a plain-English conclusion.
+Create a clean statistical analysis layer that evaluates the thesis across four pillars using the metrics outputs. Produce structured results and a plain-English conclusion.
 
 All statistical code lives in `src/bronze/`.
 
@@ -407,9 +327,9 @@ All statistical code lives in `src/bronze/`.
 | Create | `src/bronze/stats.py` | Statistical functions and `run_analysis(df) -> dict`. |
 | Create | `scripts/run_analysis.py` | Load saved metrics → run all pillars → save results. |
 | Create | `tests/test_stats.py` | Unit tests for statistical functions using synthetic data. |
-| Create | `results/stats_summary.json` | Structured statistical output. |
-| Create | `results/conclusion.txt` | Plain-English conclusion. |
-| Create | `results/statistical_results.csv` | Flattened table of key statistical outputs. |
+| Create | `data/stats_summary.json` | Structured statistical output. |
+| Create | `data/conclusion.txt` | Plain-English conclusion. |
+| Create | `data/statistical_results.csv` | Flattened table of key statistical outputs. |
 
 ---
 
@@ -572,56 +492,6 @@ Window-dressing risk is higher when:
 
 ---
 
-### Pillar 5 — TradFi Benchmark Comparison
-
-**Goal:** Put tokenized RWA growth in context against comparable traditional finance markets.
-
-```text
-Tokenized share of comparable market:
-  tokenized_share_of_tradfi_t = tokenized_cav_t / tradfi_value_t
-
-Relative growth rate:
-  relative_growth_rate_t = monthly_cav_growth_t - tradfi_growth_t
-
-OLS trend on tokenized share:
-  tokenized_share_t = alpha + beta*time
-```
-
-Benchmarks:
-
-```text
-Tokenized Treasuries     vs U.S. Treasury or money market fund AUM (SHY, ^IRX)
-Tokenized private credit vs private credit AUM (manual seed)
-Tokenized commodities    vs gold ETF AUM or gold market proxy (GLD, GC=F)
-Tokenized funds          vs ETF/mutual fund AUM (SPY proxy)
-Tokenized real estate    vs REIT or commercial real estate proxy (VNQ)
-```
-
-Output: `beta, p_value, confidence_interval, interpretation`
-
-Interpretation logic:
-
-```text
-Structural shift evidence is stronger when:
-- tokenized assets grow faster than comparable TradFi benchmarks
-- tokenized share of the comparable TradFi market rises over time
-- growth persists even after accounting for small-base effects
-
-Window-dressing risk is higher when:
-- tokenized growth is large in % terms but economically tiny relative to TradFi
-- tokenized share of the comparable market remains flat
-- no adoption or liquidity improvement despite headline growth
-```
-
-Limitation note:
-
-```text
-TradFi comparisons are benchmarks, not perfect equivalents. Differences in market structure,
-investor base, liquidity, regulation, and product design should be explained clearly.
-```
-
----
-
 ## Conclusion Logic
 
 The conclusion should be CAV-weighted, not a simple raw count of asset classes.
@@ -634,7 +504,6 @@ The final verdict evaluates:
 3. Is market composition becoming more diversified?
 4. Is adoption growing alongside asset value?
 5. Is liquidity growing alongside asset value?
-6. Is tokenized growth meaningful relative to comparable TradFi markets?
 ```
 
 Structural shift evidence is stronger when:
@@ -646,7 +515,6 @@ Structural shift evidence is stronger when:
 - active asset class count is rising
 - holder participation is rising
 - turnover/liquidity is stable or improving
-- tokenized share of comparable TradFi markets is rising
 ```
 
 Window-dressing risk is higher when:
@@ -657,7 +525,6 @@ Window-dressing risk is higher when:
 - HHI remains high or rises
 - holder growth is weak
 - turnover is low or falling
-- tokenized market size remains economically tiny relative to TradFi benchmarks
 ```
 
 The conclusion must distinguish:
@@ -676,14 +543,13 @@ Do not claim causality. If sample size is too small, mark the result as `insuffi
 
 ## Required Outputs
 
-`results/stats_summary.json` structure:
+`data/stats_summary.json` structure:
 
 ```text
 pillar1_growth
 pillar2_composition
 pillar3_adoption
 pillar4_liquidity
-pillar5_tradfi
 conclusion
 generated_at
 data_window
@@ -695,8 +561,8 @@ limitations
 ## Acceptance Criteria
 
 * `python scripts/run_analysis.py` runs without error.
-* `results/stats_summary.json` is produced with all five pillars.
-* `results/conclusion.txt` is produced.
+* `data/stats_summary.json` is produced with all four pillars.
+* `data/conclusion.txt` is produced.
 * Confidence intervals are included where OLS is used.
 * Results with insufficient sample size are clearly flagged.
 * The conclusion is CAV-weighted.
@@ -710,8 +576,8 @@ limitations
 ```bash
 python scripts/run_analysis.py
 python -m pytest tests/test_stats.py -v
-python -c "import json; d=json.load(open('results/stats_summary.json')); print(list(d.keys()))"
-cat results/conclusion.txt
+python -c "import json; d=json.load(open('data/stats_summary.json')); print(list(d.keys()))"
+cat data/conclusion.txt
 ```
 
 ---
@@ -720,7 +586,7 @@ cat results/conclusion.txt
 
 ## Goal
 
-Create a working Streamlit dashboard in the `silver/` folder that lets users explore thesis findings through saved Bronze outputs. The Silver tier reads from `results/` and does not re-fetch API data.
+Create a working Streamlit dashboard in the `silver/` folder that lets users explore thesis findings through saved Bronze outputs. The Silver tier reads from `data/` and does not re-fetch API data.
 
 Silver can be launched independently of Gold.
 
@@ -732,8 +598,8 @@ Silver can be launched independently of Gold.
 |---|---|---|
 | Create | `src/silver/app.py` | Main Streamlit entry point for the Silver tier. |
 | Create | `src/silver/components/chart_panel.py` | Reusable chart rendering components. |
-| Create | `src/silver/components/stats_panel.py` | Displays statistical outputs from `results/stats_summary.json`. |
-| Create | `src/silver/components/conclusion_panel.py` | Displays conclusion from `results/conclusion.txt`. |
+| Create | `src/silver/components/stats_panel.py` | Displays statistical outputs from `data/stats_summary.json`. |
+| Create | `src/silver/components/conclusion_panel.py` | Displays conclusion from `data/conclusion.txt`. |
 | Modify | `requirements.txt` | Add `streamlit`. |
 | Create | `.streamlit/config.toml` | Basic Streamlit settings. |
 
@@ -782,13 +648,6 @@ Turnover ratio chart
 CAV vs turnover scatterplot
 ```
 
-### Pillar 5 — TradFi Benchmark
-
-```text
-Tokenized share of TradFi benchmarks
-Relative growth rate vs benchmarks
-```
-
 ### Statistical Evidence
 
 ```text
@@ -808,7 +667,7 @@ Show window-dressing risk summary
 
 ## Streamlit Requirements
 
-* App reads from: `results/combined_metrics.csv`, `results/concentration_metrics.csv`, `results/tradfi_comparison.csv`, `results/stats_summary.json`, `results/conclusion.txt`.
+* App reads from: `data/combined_metrics.csv`, `data/concentration_metrics.csv`, `data/stats_summary.json`, `data/conclusion.txt`.
 * No API calls during runtime.
 * Sidebar: date range filter, asset class multiselect, page selector.
 * Missing result files show a clear instruction (e.g. "Run `python scripts/build_dataset.py` first.").
@@ -821,7 +680,7 @@ Show window-dressing risk summary
 * `streamlit run src/silver/app.py` starts without error.
 * App opens at `localhost:8501`.
 * Date range and asset class filters work.
-* All five pillar sections render.
+* All four pillar sections render.
 * Statistical output and conclusion render.
 * App does not call the API.
 * Missing data is handled gracefully.
@@ -862,11 +721,10 @@ Add a natural-language interface in the `gold/` folder that lets users ask thesi
 ## Chatbot Data Sources
 
 ```text
-results/stats_summary.json
-results/conclusion.txt
-results/combined_metrics.csv
-results/concentration_metrics.csv
-results/tradfi_comparison.csv
+data/stats_summary.json
+data/conclusion.txt
+data/combined_metrics.csv
+data/concentration_metrics.csv
 ```
 
 The chatbot must not re-run analysis, re-fetch API data, invent missing values, or answer outside the thesis scope.
@@ -882,7 +740,6 @@ Which asset classes show stronger adoption?
 Which asset classes have weak liquidity?
 What evidence supports a structural shift?
 What evidence supports window-dressing risk?
-How does tokenized growth compare to traditional finance benchmarks?
 What are the main limitations of this analysis?
 What data window is being used?
 ```
@@ -943,22 +800,17 @@ Only start if Phases 1–6 are all complete and presentation-ready.
 │
 ├── charts/                        # Static presentation-ready PNGs
 │
-├── data/
-│   └── benchmarks/
-│       └── tradfi_benchmarks.csv  # Manual seed for benchmarks not in yfinance
-│
-├── results/
-│   ├── combined_monthly.csv
-│   ├── combined_metrics.csv
-│   ├── concentration_metrics.csv
-│   ├── tradfi_benchmarks.csv
-│   ├── tradfi_comparison.csv
-│   ├── stats_summary.json
-│   ├── conclusion.txt
-│   └── statistical_results.csv
+├── data/                          # All datasets: pipeline outputs and static reference files
+│   ├── .gitkeep
+│   ├── combined_monthly.csv       # Phase 1 output
+│   ├── combined_metrics.csv       # Phase 2 output
+│   ├── concentration_metrics.csv  # Phase 2 output
+│   ├── stats_summary.json         # Phase 4 output
+│   ├── conclusion.txt             # Phase 4 output
+│   └── statistical_results.csv   # Phase 4 output
 │
 ├── scripts/
-│   ├── build_dataset.py           # Runs Phase 1 + 1b + 2
+│   ├── build_dataset.py           # Runs Phase 1 + 2
 │   ├── build_charts.py            # Runs Phase 3
 │   └── run_analysis.py            # Runs Phase 4
 │
@@ -970,7 +822,6 @@ Only start if Phases 1–6 are all complete and presentation-ready.
 │   │   ├── __init__.py
 │   │   ├── api_client.py
 │   │   ├── data_processing.py
-│   │   ├── tradfi_client.py
 │   │   ├── metrics.py
 │   │   ├── metrics_config.py
 │   │   ├── charts.py
@@ -1035,7 +886,6 @@ streamlit run src/gold/app.py
 
 ```bash
 git commit -m "Phase 1: RWA data pipeline"
-git commit -m "Phase 1b: TradFi benchmark pipeline"
 git commit -m "Phase 2: metrics layer"
 git commit -m "Phase 3: static charts"
 git commit -m "Phase 4: statistical analysis"
@@ -1060,10 +910,9 @@ __pycache__/
 
 ```text
 Phase 1:  Bronze — RWA Data Pipeline
-Phase 1b: Bronze — TradFi Benchmark Pipeline
 Phase 2:  Bronze — Metrics Layer
 Phase 3:  Bronze — Static Charts
-Phase 4:  Bronze — Statistical Analysis (5 pillars)
+Phase 4:  Bronze — Statistical Analysis (4 pillars)
 Phase 5:  Silver — Streamlit Dashboard
 Phase 6:  Gold   — Local Results Chatbot
 Phase 7:  Gold   — Optional MCP / Live Data

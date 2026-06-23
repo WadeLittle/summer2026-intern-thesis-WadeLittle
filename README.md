@@ -5,7 +5,7 @@
 
 Are financial institutions structurally migrating real-world assets to blockchain-based infrastructure — treating on-chain settlement and custody as a superior alternative to legacy financial rails — or is this a temporary positioning strategy with limited staying power?
 
-The thesis is tested across five statistical pillars using live data from the [rwa.xyz](https://rwa.xyz) API:
+The thesis is tested across four statistical pillars using live data from the [rwa.xyz](https://rwa.xyz) API:
 
 | Pillar | Question | Method |
 |--------|----------|--------|
@@ -13,7 +13,6 @@ The thesis is tested across five statistical pillars using live data from the [r
 | 2 — Composition | Is growth diversifying beyond US Treasury Debt? | HHI trend, top-5 share, active class count (OLS) |
 | 3 — Adoption | Are more wallets participating relative to capital inflows? | OLS on log holders, Spearman ρ |
 | 4 — Liquidity | Is transfer activity growing with circulating value? | Turnover ratio OLS, Spearman ρ |
-| 5 — TradFi Benchmark | Is tokenized growth meaningful relative to comparable TradFi markets? | Relative growth rate, tokenized share of TradFi (OLS) |
 
 ---
 
@@ -41,10 +40,9 @@ Gold   — Chatbot + optional live MCP data built on top of Silver
 | Phase | Description | Status |
 |-------|-------------|--------|
 | 1 | Bronze: RWA Data Pipeline | ✅ Complete |
-| 1b | Bronze: TradFi Benchmark Pipeline | Planned |
 | 2 | Bronze: Metrics Layer | Planned |
 | 3 | Bronze: Static Charts | Planned |
-| 4 | Bronze: Statistical Analysis (5 pillars) | Planned |
+| 4 | Bronze: Statistical Analysis (4 pillars) | Planned |
 | 5 | Silver: Streamlit Dashboard | Planned |
 | 6 | Gold: Local Results Chatbot | Planned |
 | 7 | Gold: Optional MCP / Live Data | Planned |
@@ -57,7 +55,7 @@ Gold   — Chatbot + optional live MCP data built on top of Silver
 summer2026-intern-thesis-WadeLittle/
 │
 ├── scripts/
-│   ├── build_dataset.py         ← Phase 1+1b+2: fetch, process, validate, save CSV
+│   ├── build_dataset.py         ← Phase 1+2: fetch, process, validate, save CSV
 │   ├── build_charts.py          ← Phase 3: load metrics → generate static PNGs
 │   └── run_analysis.py          ← Phase 4: load metrics → run stats → save results
 │
@@ -69,19 +67,15 @@ summer2026-intern-thesis-WadeLittle/
 │       ├── __init__.py
 │       ├── api_client.py        ← rwa.xyz API calls + 24-hour file cache
 │       ├── data_processing.py   ← Raw JSON → clean monthly DataFrame + metric builders
-│       ├── tradfi_client.py     ← yfinance benchmark fetcher (Phase 1b)
 │       ├── metrics.py           ← Derived metric functions (Phase 2)
 │       ├── metrics_config.py    ← Metric constants: windows, thresholds (Phase 2)
 │       ├── charts.py            ← Static chart functions (Phase 3)
-│       ├── stats.py             ← Statistical test functions (Phase 4)
-│       └── analysis.py          ← Legacy entry point (being phased out)
+│       └── stats.py             ← Statistical test functions (Phase 4)
 │
-├── results/                     ← All pipeline outputs (gitignored except .gitkeep)
+├── data/                        ← All pipeline outputs (gitignored except .gitkeep)
 │   ├── combined_monthly.csv     ← Phase 1 output: base dataset
 │   ├── combined_metrics.csv     ← Phase 2 output
 │   ├── concentration_metrics.csv
-│   ├── tradfi_benchmarks.csv
-│   ├── tradfi_comparison.csv
 │   ├── stats_summary.json       ← Phase 4 output
 │   ├── conclusion.txt
 │   └── statistical_results.csv
@@ -93,8 +87,6 @@ summer2026-intern-thesis-WadeLittle/
 │
 ├── charts/                      ← Static chart PNGs (Phase 3 output)
 ├── cache/                       ← 24-hour API response cache (gitignored)
-├── data/
-│   └── benchmarks/              ← Manual seed data for TradFi benchmarks (Phase 1b)
 ├── requirements.txt
 ├── .env.example
 └── README.md
@@ -125,16 +117,16 @@ cp .env.example .env
 python3 scripts/build_dataset.py
 ```
 
-This fetches CAV, holder counts, and transfer volume from rwa.xyz (cached for 24 hours), validates the output, prints a data quality summary, and saves the base dataset to `results/combined_monthly.csv`.
+This fetches CAV, holder counts, and transfer volume from rwa.xyz (cached for 24 hours), validates the output, prints a data quality summary, and saves the base dataset to `data/combined_monthly.csv`.
 
 ### 4. Verify the output
 
 ```bash
-head -5 results/combined_monthly.csv
+head -5 data/combined_monthly.csv
 
 python3 -c "
 import pandas as pd
-df = pd.read_csv('results/combined_monthly.csv')
+df = pd.read_csv('data/combined_monthly.csv')
 print(df.dtypes)
 print(df['date'].min(), df['date'].max())
 print(df['asset_class'].unique())
@@ -175,7 +167,7 @@ Thirteen traditional RWA asset classes are included in the primary analysis. Sta
 
 ## Phase 1 Output
 
-`results/combined_monthly.csv` — 493 rows, 13 asset classes, 2023-01 to 2026-05.
+`data/combined_monthly.csv` — 493 rows, 13 asset classes, 2023-01 to 2026-05.
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -202,7 +194,6 @@ Data quality guarantees enforced at build time:
 | pandas / numpy | Data manipulation and computation |
 | matplotlib | Static chart generation (Phase 3) |
 | scipy / statsmodels | Statistical tests: OLS, Spearman, Kendall (Phase 4) |
-| yfinance | TradFi benchmark data (Phase 1b) |
 | streamlit | Interactive dashboard (Phase 5+) |
 | python-dotenv | API key management via `.env` |
 | pytest | Test suite |
@@ -212,7 +203,7 @@ Data quality guarantees enforced at build time:
 
 ## Statistical Methods (Phase 4)
 
-### OLS Regression (Pillars 1, 2, 4, 5)
+### OLS Regression (Pillars 1, 2, 3, 4)
 
 Fits a trend line through the metric over time. The slope (β) quantifies direction and speed; the p-value indicates whether that slope is distinguishable from zero. Confidence intervals are included in all OLS outputs.
 
@@ -247,7 +238,6 @@ Each asset class is indexed to its own first valid monthly observation = 100. Th
 - Correlation ≠ causation; structural-shift signals may reflect macro conditions (rate environment, regulatory clarity) rather than tokenization-specific dynamics
 - Single data source (rwa.xyz); coverage gaps in smaller asset classes may affect completeness
 - Holder count is an on-chain wallet proxy, not a perfect measure of unique users — one institution can control multiple wallets
-- TradFi comparisons are benchmarks, not perfect equivalents; differences in market structure, liquidity, regulation, and product design must be considered
 - Short overall time series (starting 2023-01) limits statistical power for trend detection
 - Asset classes analyzed in isolation, not in portfolio context
 - Results with insufficient sample size are flagged `insufficient_data` in the statistical output rather than reported as weak/no effect
