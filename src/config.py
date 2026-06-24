@@ -56,3 +56,33 @@ ASSET_CLASSES_SUPPLEMENTAL = [
     "Cryptocurrencies",
     "Fiat Currency",
 ]
+
+# ---------------------------------------------------------------------------
+# Visualization — asset class color identity
+# ---------------------------------------------------------------------------
+
+# The class excluded from all "ex-repo" chart variants.
+REPO_CLASS = "Repurchase Agreements"
+
+# Fallback color for collapsed "Other" buckets and any unknown class name.
+OTHER_COLOR = "#c7c7c7"
+
+# One fixed color per in-scope asset class.
+# All charts import from here so every class renders in the same color
+# regardless of which chart it appears in.
+ASSET_CLASS_COLORS: dict[str, str] = {
+    "Active Strategies":      "#1f77b4",  # tab blue
+    "Asset-Backed Credit":    "#ff7f0e",  # tab orange
+    "Commodities":            "#2ca02c",  # tab green
+    "Corporate Credit":       "#d62728",  # tab red
+    "Diversified Credit":     "#9467bd",  # tab purple
+    "Private Equity":         "#8c564b",  # tab brown
+    "Real Estate":            "#e377c2",  # tab pink
+    "Repurchase Agreements":  "#17becf",  # tab cyan
+    "Specialty Finance":      "#bcbd22",  # tab yellow-green
+    "Stocks":                 "#aec7e8",  # tab light blue
+    "US Treasury Debt":       "#ffbb78",  # tab light orange
+    "Venture Capital":        "#98df8a",  # tab light green
+    "non-US Government Debt": "#ff9896",  # tab light red
+    "Other":                  "#c7c7c7",  # light grey (same as OTHER_COLOR)
+}

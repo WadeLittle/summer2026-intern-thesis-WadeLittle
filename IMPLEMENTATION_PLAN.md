@@ -293,7 +293,7 @@ At minimum, produce charts 1–5.
 
 ## Acceptance Criteria
 
-* `python scripts/build_charts.py` runs without error.
+* `python3 scripts/build_charts.py` runs without error.
 * At least 5 core chart PNGs are created in `charts/`.
 * No chart x-axis begins before the first date in the data.
 * Each chart function can be called independently with a metrics DataFrame.
@@ -304,9 +304,77 @@ At minimum, produce charts 1–5.
 ## Commands to Run
 
 ```bash
-python scripts/build_charts.py
+python3 scripts/build_charts.py
 ls -lh charts/
 ```
+
+---
+
+## Phase 3 Expansion — Chart Improvements and Additions
+
+This section documents the changes made after the initial Phase 3 implementation, including charts that were added, revised, or removed, and the reasoning behind each decision.
+
+### Output Structure
+
+Charts are split into two subfolders for cleaner organization:
+
+```
+charts/
+  png/   — all PNG files (presentation-ready, DPI 150)
+  pdf/   — all PDF files (vector, suitable for LaTeX or print)
+```
+
+`build_charts.py` clears both folders before each run so no stale outputs accumulate.
+
+### Data Freshness Enforcement
+
+`build_charts.py` now checks the modification time of `data/combined_metrics.csv` and `data/concentration_metrics.csv` against `CACHE_TTL_SECONDS` (defined in `src/config.py`, default 24 hours) before building any chart. If either file is missing or older than the TTL, `build_dataset.py` is invoked automatically to fetch fresh API data and recompute all metrics. This ensures charts always reflect up-to-date data without requiring the user to run two scripts manually.
+
+### Uniform Asset Class Colors
+
+All charts pull asset class colors from a single dict, `ASSET_CLASS_COLORS`, defined in `src/config.py`. Every chart function calls `_class_color(cls)` which looks up this dict with an `OTHER_COLOR` fallback. This guarantees that a given asset class always renders in the same color across every chart in the deck — critical for a presentation where the audience will build a mental model of which color maps to which class.
+
+Non-class aggregate series (rolling growth lines, HHI lines, total-CAV fills) use a separate `_SERIES_COLORS` list in `charts.py` to keep the class color palette free of collision.
+
+### Repurchase Agreements Dominance Problem
+
+After mid-2025, Repurchase Agreements account for ~85% of total CAV. This single class distorts every aggregate chart: total CAV jumps, HHI spikes, rolling growth is dominated by the repo entry event, and the stacked area chart becomes unreadable for all other classes. The expansion addresses this by providing parallel "ex-repo" versions of the key time-series charts so both stories can be told:
+
+> "Including repos, tokenized RWAs are already very large."
+> "Excluding repos, the rest of the market is smaller but more diverse and analytically meaningful."
+
+### Charts Removed
+
+| Chart | Reason |
+|---|---|
+| `chart3_hhi_concentration` | Total-market HHI is trivially high once repos dominate (~0.75+). The story — "repo dominates" — is already told more clearly by chart2 and chart10. |
+| `chart6_rolling_growth` | The repo expansion creates a spike that collapses the y-axis and makes the pre-2025 history invisible. Chart19 covers the same metric on ex-repo data. |
+| `chart7_cav_vs_holders` | Plotting all monthly observations for all classes produces overlapping blobs with no clear message. Replaced by chart11 which uses only the latest month with direct labels. |
+| `chart8_cav_vs_turnover` | Same issue as chart7. The three-way relationship (CAV, holders, turnover) is shown more clearly in chart11 via bubble sizing. |
+
+### Charts Revised
+
+| Chart | Change | Reason |
+|---|---|---|
+| `chart3_holder_growth` | Replaced holders index (base-100) with raw holder counts by class. | The indexed format caused extreme y-axis values for fast-growing classes, forcing a log scale and making the chart unreadable. Raw counts are directly interpretable. |
+| `chart4_turnover_ratio` | Changed filter from top-N by CAV to top-N by **median turnover**. | A class can be large by CAV but have near-zero turnover (e.g. US Treasury Debt held as long-term collateral). The old filter showed the biggest classes, not the most actively traded ones. |
+| `chart8_latest_composition` | Added share-of-total percentage labels to the **left (all classes) panel** as well as the right (ex-repo) panel. | Both panels are equally useful for the presentation; the percentage annotation gives immediate context without requiring the viewer to read the x-axis scale. |
+| `chart14_ex_repo_hhi` | Replaced dual-axis HHI + top-5 share chart with a **single-line ex-repo top-5 share** chart. | The dual-axis format was confusing and HHI is too technical for a presentation audience. A single line showing "what fraction of the ex-repo market do the top 5 classes hold?" is immediately readable. A falling line means the market is broadening, annotated directly on the chart. |
+
+### New Charts Added (10–19)
+
+| Chart | Description |
+|---|---|
+| `chart6_ex_repo_total_cav` | Total CAV over time, excluding Repurchase Agreements. Shows the growth trajectory of the non-repo market independently. |
+| `chart7_ex_repo_by_class` | Stacked area chart by asset class, excluding Repurchase Agreements. Shows which classes drive the ex-repo market and how their relative sizes have shifted. |
+| `chart8_latest_composition` | Horizontal bar chart of the latest month's CAV by asset class, two panels: all classes and ex-repo. Percentage share annotated on both panels. Best single slide for showing current market structure. |
+| `chart9_cav_share_over_time` | Two-panel stacked area chart showing each asset class as a percentage of total CAV over time (left: all, right: ex-repo). Answers whether the market is becoming more or less diversified. |
+| `chart10_before_after_repo` | Two stacked bars comparing market composition before the repo expansion (May 2025) and after (latest month). Expansion date is detected programmatically as the first month where repo share exceeds 50%. |
+| `chart11_latest_market_map` | Bubble scatter of all asset classes at the latest date only. x = holders, y = CAV, bubble size = turnover ratio. Each point is directly labeled. Tells the full story of size, adoption, and liquidity in one chart. |
+| `chart12_median_turnover` | Horizontal bar chart of median monthly turnover ratio by asset class over the last 12 months. Cleaner than the monthly line chart for identifying which classes are most actively traded. |
+| `chart13_total_holders` | Total holder count summed across all asset classes over time. Simple adoption signal that is not distorted by repo. |
+| `chart14_ex_repo_concentration` | Single-line chart of the top-5 asset class share of ex-repo CAV over time. Falling = market broadening. Annotated with a direction cue for the audience. |
+| `chart15_ex_repo_rolling_growth` | Rolling 3-month and 6-month CAV growth rates computed from ex-repo CAV only. Shows whether the non-repo market is accelerating or decelerating without the repo entry distortion. |
 
 ---
 
