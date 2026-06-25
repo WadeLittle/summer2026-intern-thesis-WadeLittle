@@ -650,6 +650,62 @@ cat data/conclusion.txt
 
 ---
 
+## Phase 4 Amendments — Post-Implementation Corrections
+
+This section documents corrections and additions made after the initial Phase 4 implementation.
+
+### Spurious Regression: ln(holders) ~ ln(cav) in Levels
+
+**Problem discovered:** The per-class Pillar 3 regressions originally fit `ln(holders) ~ ln(cav)` using monthly observations over the full 41-month window. Durbin-Watson statistics of 0.26–0.69 were found across all 12 asset classes (healthy threshold ≥1.5), indicating heavily autocorrelated residuals — the hallmark of spurious regression. When two non-stationary series (both trending upward over the same period) are regressed against each other in levels, OLS inflates t-statistics and produces near-zero p-values regardless of any true relationship. The original result — 12/12 classes significant, CAV-weighted adoption score of 1.00 — was an artifact, not a finding.
+
+The same problem applied to the per-class Pillar 4 regressions (`turnover_3m ~ ln(cav)`) and the market-level log-log regressions in both pillars.
+
+**Fix:** Added a new primitive `_ols_growth_on_growth(pct_y, pct_x)` that regresses monthly growth rates (first differences of log levels) on each other. Growth rates are stationary and do not share a common time trend, so OLS inference is valid. The per-class regressions in Pillars 3 and 4 were updated to use this function:
+
+| Pillar | Old test | New test |
+|--------|----------|----------|
+| P3 per-class | `ln(holders) ~ ln(cav)` | `monthly_holder_growth ~ asset_class_cav_growth` |
+| P4 per-class | `turnover_3m ~ ln(cav)` | `pct_change(turnover_ratio) ~ asset_class_cav_growth` |
+| P3 market-level | `ln(holders) ~ ln(cav)` | `ex_repo_holders_growth ~ ex_repo_cav_growth` |
+| P4 market-level | `turnover ~ ln(cav)` | `ex_repo_turnover_growth ~ ex_repo_cav_growth` |
+
+The `_ols_log_log` function was retained (with `spurious_regression_warning` and `durbin_watson` fields added to its output) for structural or cross-sectional use cases, but is no longer used for time-series co-movement tests.
+
+**Impact on findings:**
+
+| Metric | Before (spurious) | After (corrected) |
+|--------|------------------|-------------------|
+| P3 classes significant | 12/12 | 2/12 |
+| P3 CAV-weighted adoption score | 1.00 | 0.16 |
+| P4 classes significant | 10/12 | 2/12 |
+| P4 CAV-weighted liquidity score | 0.97 | 0.04 |
+
+The market-level Spearman correlation (ρ=0.505, p<0.01) was not affected — it already operated on growth rates, not levels.
+
+### Named Asset Class Disclosure in Pillar 3 and Pillar 4
+
+**Change:** The per-class loops in Pillars 3 and 4 now collect the names of asset classes that pass the significance threshold into `significant_adoption_classes` and `significant_liquidity_classes` lists respectively. These lists are embedded in three places:
+
+1. The pillar `summary.interpretation` string (e.g. `"2/12 asset classes ... (Commodities, Venture Capital)"`)
+2. The pillar `summary` dict as a named field for downstream consumers (Streamlit, chatbot)
+3. The `conclusion.txt` output via `build_conclusion()`, which reads `s3["significant_adoption_classes"]` and `s4["significant_liquidity_classes"]` directly into the client-facing prose
+
+This ensures that wherever the adoption and liquidity scores appear — in the JSON, in the console summary, and in the conclusion that clients read — the specific market segments driving the result are named, not just counted.
+
+**Conclusion.txt output (as of current run):**
+
+```
+Only 16% of ex-repo CAV (by weight) is in asset classes with significant positive
+adoption co-movement — improvement is concentrated in specific segments
+(Commodities, Venture Capital).
+
+CAV-weighted liquidity score: 4% of ex-repo asset value is in classes where monthly
+turnover growth co-moves significantly with CAV growth (Private Equity, non-US
+Government Debt).
+```
+
+---
+
 # Phase 5 — Silver: Streamlit Dashboard
 
 ## Goal
